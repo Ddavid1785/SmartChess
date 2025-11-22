@@ -1,1 +1,3 @@
 # SmartChess
+
+lopuzo nekradi
