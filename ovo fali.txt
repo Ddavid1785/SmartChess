@@ -1,0 +1,14 @@
+ovo fali
+
+draw
+
+win
+
+stalemate
+
+check samo se kralj moze micat ili nesto ispred kralja
+
+provjeri je l check mate 
+
+netko ispred kinga se nesmiej maknut
+
