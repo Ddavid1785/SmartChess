@@ -235,25 +235,39 @@ bool ChessBoard::movePiece(int fromRow, char fromCol, int toRow, char toCol, Pro
             }
         }
 
-        // Update last move for en passant
-        lastMove.piece = pawn;
-        lastMove.fromRow = fromRow;
-        lastMove.fromCol = fromCol;
-        lastMove.toRow = toRow;
-        lastMove.toCol = toCol;
+        // Update last move for en passant (only if pawn advanced two squares)
+        if (abs(toRow - fromRow) == 2)
+        {
+            lastMove.piece = pawn;
+            lastMove.fromRow = fromRow;
+            lastMove.fromCol = fromCol;
+            lastMove.toRow = toRow;
+            lastMove.toCol = toCol;
+        }
+        else
+        {
+            // Clear en passant opportunity if pawn didn't advance two squares
+            lastMove.piece = nullptr;
+        }
 
         // Reset half-move clock on pawn move
         halfMoveClock = 0;
     }
-    else if (capturedPiece)
-    {
-        // Reset half-move clock on capture
-        halfMoveClock = 0;
-    }
     else
     {
-        // Increment half-move clock
-        halfMoveClock++;
+        // Non-pawn move: clear en passant opportunity
+        lastMove.piece = nullptr;
+
+        if (capturedPiece)
+        {
+            // Reset half-move clock on capture
+            halfMoveClock = 0;
+        }
+        else
+        {
+            // Increment half-move clock
+            halfMoveClock++;
+        }
     }
 
     // --- Move the piece ---
