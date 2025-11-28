@@ -56,11 +56,15 @@ ChessBoard board;
  *     * GAME_STALEMATE - current player is stalemated (draw)
  *     * GAME_DRAW - game is a draw (50-move rule, threefold repetition, etc.)
  *   - Example: if (board.getGameState() == GAME_CHECKMATE_WHITE) { /* black wins */
-
 **PieceColor turn = board.getCurrentTurn();
-*-Returns whose turn it is : WHITE or BLACK * -Example : if (board.getCurrentTurn() == WHITE){/* white's turn */} *
+*-Returns whose turn it is : WHITE or BLACK * -Example : *if (board.getCurrentTurn() == WHITE){* // white's turn
+                                                                                               *} *
                                           *bool inCheck = board.isInCheck(color);
-*-Checks if a player's king is in check * -color : WHITE or BLACK * -Returns true if king is in check, false otherwise * -Example : if (board.isInCheck(WHITE)) { Serial.println("White is in check!"); }
+*-Checks if a player's king is in check * -color : WHITE or BLACK * -Returns true if king is in check, false otherwise * -Example : *if (board.isInCheck(WHITE))
+{
+    *Serial.println("White is in check!");
+    *
+}
  * 
  * ============================================================================
  * 4. READING THE BOARD (for Arduino sensors)

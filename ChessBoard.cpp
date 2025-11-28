@@ -46,10 +46,10 @@ void ChessBoard::removePiece(int row, char col)
     {
         Serial.print("Removing piece: ");
         p->printInfo();
+        delete p;
         board[rowToIndex(row)][colToIndex(col)] = nullptr;
     }
 }
-
 void ChessBoard::captureAndPlace(Piece *piece, int row, char col)
 {
     if (getPiece(row, col) != nullptr)
@@ -358,6 +358,28 @@ bool ChessBoard::isPathClear(int fromRow, char fromCol, int toRow, char toCol)
         if (colDiff != 0)
         {
             Piece *targetPiece = getPiece(toRow, toCol);
+            // If target square is empty, check for en passant
+            if (targetPiece == nullptr)
+            {
+                // Check en passant condition
+                int dir = (piece->getColor() == WHITE) ? 1 : -1;
+                // En passant: diagonal move one square forward into empty square
+                if (abs(toCol - fromCol) == 1 && toRow - fromRow == dir)
+                {
+                    // Check if last move was by opponent's pawn that moved two squares
+                    if (lastMove.piece && lastMove.piece->getTypeName()[0] == 'P')
+                    {
+                        if (lastMove.piece->getColor() != piece->getColor() &&
+                            abs(lastMove.toRow - lastMove.fromRow) == 2 &&
+                            lastMove.toRow == fromRow &&
+                            lastMove.toCol == toCol)
+                        {
+                            return true; // En passant is valid
+                        }
+                    }
+                }
+                return false; // Empty diagonal target without en passant is invalid
+            }
             return targetPiece != nullptr && targetPiece->getColor() != piece->getColor();
         }
         // For forward moves, check if path is clear and destination is empty
@@ -438,9 +460,44 @@ bool ChessBoard::wouldMoveLeaveKingInCheck(int fromRow, char fromCol, int toRow,
     Piece *piece = getPiece(fromRow, fromCol);
     Piece *capturedPiece = getPiece(toRow, toCol);
 
+    // Check if this is an en passant capture
+    bool isEnPassant = false;
+    Piece *enPassantCapturedPawn = nullptr;
+
+    if (piece && piece->getTypeName()[0] == 'P')
+    {
+        Pawn *pawn = (Pawn *)piece;
+        int dir = (pawn->getColor() == WHITE) ? 1 : -1;
+
+        // En passant: pawn moves diagonally one square forward into empty square
+        if (abs(toCol - fromCol) == 1 &&
+            toRow - fromRow == dir &&
+            getPiece(toRow, toCol) == nullptr)
+        {
+            // Check if there's an en passant-eligible pawn at (fromRow, toCol)
+            if (lastMove.piece && lastMove.piece->getTypeName()[0] == 'P')
+            {
+                if (lastMove.piece->getColor() != pawn->getColor() &&
+                    abs(lastMove.toRow - lastMove.fromRow) == 2 &&
+                    lastMove.toRow == fromRow &&
+                    lastMove.toCol == toCol)
+                {
+                    isEnPassant = true;
+                    enPassantCapturedPawn = getPiece(fromRow, toCol);
+                }
+            }
+        }
+    }
+
     // Execute the move temporarily
     board[rowToIndex(toRow)][colToIndex(toCol)] = piece;
     board[rowToIndex(fromRow)][colToIndex(fromCol)] = nullptr;
+
+    // If en passant, also clear the captured pawn's square
+    if (isEnPassant && enPassantCapturedPawn)
+    {
+        board[rowToIndex(fromRow)][colToIndex(toCol)] = nullptr;
+    }
 
     // Check if king is in check
     bool inCheck = isInCheck(color);
@@ -448,6 +505,12 @@ bool ChessBoard::wouldMoveLeaveKingInCheck(int fromRow, char fromCol, int toRow,
     // Undo the move
     board[rowToIndex(fromRow)][colToIndex(fromCol)] = piece;
     board[rowToIndex(toRow)][colToIndex(toCol)] = capturedPiece;
+
+    // If en passant, restore the captured pawn
+    if (isEnPassant && enPassantCapturedPawn)
+    {
+        board[rowToIndex(fromRow)][colToIndex(toCol)] = enPassantCapturedPawn;
+    }
 
     return inCheck;
 }
@@ -616,7 +679,9 @@ int ChessBoard::countMoveRepetitions()
     }
 
     // Count how many times this position occurred
-    int count = 1; // Current position counts as one
+    // Note: storeBoardState already appended the current state to positionHistory,
+    // so we start count at 0 and compare against all stored entries
+    int count = 0;
     for (int i = 0; i < positionCount; i++)
     {
         if (compareBoardStates(currentState, positionHistory[i]))
@@ -648,9 +713,15 @@ bool ChessBoard::isDraw()
         return true;
     }
 
-    // Insufficient material (simplified check)
-    int whitePieces = 0, blackPieces = 0;
-    int whiteNonPawnNonKing = 0, blackNonPawnNonKing = 0;
+    // Insufficient material check
+    // A game is drawn if neither side has sufficient material to force checkmate
+    int whitePawns = 0, blackPawns = 0;
+    int whiteRooks = 0, blackRooks = 0;
+    int whiteKnights = 0, blackKnights = 0;
+    int whiteBishops = 0, blackBishops = 0;
+    int whiteQueens = 0, blackQueens = 0;
+    bool whiteHasLightBishop = false, whiteHasDarkBishop = false;
+    bool blackHasLightBishop = false, blackHasDarkBishop = false;
 
     for (int r = 1; r <= 8; r++)
     {
@@ -660,32 +731,115 @@ bool ChessBoard::isDraw()
             if (p != nullptr)
             {
                 char type = p->getTypeName()[0];
+                // Determine if square is light or dark
+                // A1 is dark, so even sum = dark, odd sum = light
+                // A=1, B=2, etc., rows 1-8
+                int colVal = c - 'A' + 1;
+                bool isLightSquare = ((r + colVal) % 2 == 1);
+
                 if (p->getColor() == WHITE)
                 {
-                    whitePieces++;
-                    if (type != 'P' && type != 'K')
+                    if (type == 'P')
+                        whitePawns++;
+                    else if (type == 'R')
+                        whiteRooks++;
+                    else if (type == 'N')
+                        whiteKnights++;
+                    else if (type == 'B')
                     {
-                        whiteNonPawnNonKing++;
+                        whiteBishops++;
+                        if (isLightSquare)
+                            whiteHasLightBishop = true;
+                        else
+                            whiteHasDarkBishop = true;
                     }
+                    else if (type == 'Q')
+                        whiteQueens++;
                 }
                 else
                 {
-                    blackPieces++;
-                    if (type != 'P' && type != 'K')
+                    if (type == 'P')
+                        blackPawns++;
+                    else if (type == 'R')
+                        blackRooks++;
+                    else if (type == 'N')
+                        blackKnights++;
+                    else if (type == 'B')
                     {
-                        blackNonPawnNonKing++;
+                        blackBishops++;
+                        if (isLightSquare)
+                            blackHasLightBishop = true;
+                        else
+                            blackHasDarkBishop = true;
                     }
+                    else if (type == 'Q')
+                        blackQueens++;
                 }
             }
         }
     }
 
-    // If both sides only have king, or king + minor piece, it's a draw
-    if (whitePieces <= 2 && blackPieces <= 2 && whiteNonPawnNonKing <= 1 && blackNonPawnNonKing <= 1)
+    // If either side has pawns, rooks, or queens, there is sufficient material
+    if (whitePawns > 0 || blackPawns > 0 ||
+        whiteRooks > 0 || blackRooks > 0 ||
+        whiteQueens > 0 || blackQueens > 0)
+    {
+        return false;
+    }
+
+    // Count total minor pieces (knights + bishops) for each side
+    int whiteMinorPieces = whiteKnights + whiteBishops;
+    int blackMinorPieces = blackKnights + blackBishops;
+
+    // King vs King - insufficient material
+    if (whiteMinorPieces == 0 && blackMinorPieces == 0)
     {
         return true;
     }
 
+    // King + one minor piece vs King - insufficient material
+    if ((whiteMinorPieces == 0 && blackMinorPieces == 1) ||
+        (whiteMinorPieces == 1 && blackMinorPieces == 0))
+    {
+        return true;
+    }
+
+    // King + two knights vs King - insufficient material (2 knights cannot force mate)
+    if ((whiteMinorPieces == 0 && blackKnights == 2 && blackBishops == 0) ||
+        (blackMinorPieces == 0 && whiteKnights == 2 && whiteBishops == 0))
+    {
+        return true;
+    }
+
+    // King + bishop vs King + bishop - insufficient material only if same-color bishops
+    if (whiteMinorPieces == 1 && blackMinorPieces == 1 &&
+        whiteBishops == 1 && blackBishops == 1 && whiteKnights == 0 && blackKnights == 0)
+    {
+        // Check if both bishops are on same color squares
+        bool whiteOnLight = whiteHasLightBishop;
+        bool blackOnLight = blackHasLightBishop;
+        if (whiteOnLight == blackOnLight)
+        {
+            return true; // Same-color bishops cannot force mate
+        }
+        // Opposite-color bishops can force mate, so not insufficient material
+    }
+
+    // King + knight vs King + knight - insufficient material
+    if (whiteMinorPieces == 1 && blackMinorPieces == 1 &&
+        whiteKnights == 1 && blackKnights == 1 && whiteBishops == 0 && blackBishops == 0)
+    {
+        return true;
+    }
+
+    // King + bishop vs King + knight - insufficient material
+    if ((whiteMinorPieces == 1 && blackMinorPieces == 1) &&
+        ((whiteBishops == 1 && blackKnights == 1) || (whiteKnights == 1 && blackBishops == 1)))
+    {
+        return true;
+    }
+
+    // All other combinations have sufficient material
     return false;
 }
 
@@ -783,22 +937,26 @@ void ChessBoard::initializeStandardGame()
     placePiece(new Bishop(WHITE), 1, 'C');
     placePiece(new Queen(WHITE), 1, 'D');
     placePiece(new King(WHITE), 1, 'E');
-    placePiece(new Bishop(WHITE), 1, 'F');
-    placePiece(new Knight(WHITE), 1, 'G');
-    placePiece(new Rook(WHITE), 1, 'H');
-
-    // Place white pawns
-    for (char c = 'A'; c <= 'H'; c++)
+    Piece *newPiece = nullptr;
+    switch (promoteChoice)
     {
-        placePiece(new Pawn(WHITE), 2, c);
+    case PROMOTE_QUEEN:
+        newPiece = new Queen(color);
+        break;
+    case PROMOTE_ROOK:
+        newPiece = new Rook(color);
+        break;
+    case PROMOTE_BISHOP:
+        newPiece = new Bishop(color);
+        break;
+    case PROMOTE_KNIGHT:
+        newPiece = new Knight(color);
+        break;
+    default:
+        Serial.println("Invalid promotion choice, defaulting to Queen");
+        newPiece = new Queen(color);
+        break;
     }
-
-    // Place black pieces
-    placePiece(new Rook(BLACK), 8, 'A');
-    placePiece(new Knight(BLACK), 8, 'B');
-    placePiece(new Bishop(BLACK), 8, 'C');
-    placePiece(new Queen(BLACK), 8, 'D');
-    placePiece(new King(BLACK), 8, 'E');
     placePiece(new Bishop(BLACK), 8, 'F');
     placePiece(new Knight(BLACK), 8, 'G');
     placePiece(new Rook(BLACK), 8, 'H');

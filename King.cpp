@@ -61,9 +61,14 @@ bool King::canMove(int fromRow, char fromCol, int toRow, char toCol, ChessBoard 
         char step = (toCol > fromCol) ? 1 : -1;
         for (char c = fromCol + step; c != rookCol; c += step)
         {
+            // All squares between king and rook must be empty
             if (board->getPiece(fromRow, c) != nullptr)
                 return false; // blocked
-            if (board->isSquareAttacked(fromRow, c, _color == WHITE ? BLACK : WHITE))
+
+            // But only the squares the king actually traverses may not be attacked
+            bool isKingPathSquare = (step > 0) ? (c <= toCol) : (c >= toCol);
+            if (isKingPathSquare &&
+                board->isSquareAttacked(fromRow, c, _color == WHITE ? BLACK : WHITE))
                 return false;
         }
 
