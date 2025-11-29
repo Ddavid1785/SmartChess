@@ -3,34 +3,37 @@
 
 #include <Arduino.h>
 
-enum PieceType {
-    PAWN,
-    ROOK,
-    KNIGHT,
-    BISHOP,
-    QUEEN,
-    KING
+enum PieceType
+{
+  PAWN,
+  ROOK,
+  KNIGHT,
+  BISHOP,
+  QUEEN,
+  KING
 };
 
-enum PieceColor {
-    WHITE,
-    BLACK
+enum PieceColor
+{
+  WHITE,
+  BLACK
 };
 
-class Piece {
-  public:
-    Piece(PieceType type, PieceColor color);
+class Piece
+{
+public:
+  Piece(PieceType type, PieceColor color);
+  PieceType getType() { return _type; }
+  virtual const char *getTypeName() = 0;
+  PieceColor getColor();
 
-    virtual const char* getTypeName() = 0;
-    PieceColor getColor();
+  virtual bool canMove(int fromRow, char fromCol, int toRow, char toCol) = 0;
+  virtual ~Piece() {}
+  void printInfo();
 
-    virtual bool canMove(int fromRow, char fromCol, int toRow, char toCol) = 0;
-
-    void printInfo();
-
-  protected:
-    PieceType _type;
-    PieceColor _color;
+protected:
+  PieceType _type;
+  PieceColor _color;
 };
 
 #endif

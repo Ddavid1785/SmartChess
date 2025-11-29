@@ -317,8 +317,41 @@ void ChessBoard::printBoard()
             if (p == nullptr)
                 Serial.print(". ");
             else
-                Serial.print(p->getTypeName()[0]), Serial.print(" ");
+            {
+                char pieceChar = '?'; // Initialize to avoid warnings
+                switch (p->getType())
+                {
+                case PAWN:
+                    pieceChar = 'P';
+                    break;
+                case ROOK:
+                    pieceChar = 'R';
+                    break;
+                case KNIGHT:
+                    pieceChar = 'N';
+                    break;
+                case BISHOP:
+                    pieceChar = 'B';
+                    break;
+                case QUEEN:
+                    pieceChar = 'Q';
+                    break;
+                case KING:
+                    pieceChar = 'K';
+                    break;
+                }
+
+                // Optional: visual distinction for Black pieces in console
+                if (p->getColor() == BLACK)
+                {
+                    pieceChar = tolower(pieceChar);
+                }
+
+                Serial.print(pieceChar);
+                Serial.print(" ");
+            }
         }
+        // REMOVED THE ERROR LINE HERE
         Serial.println();
     }
     Serial.println("  A B C D E F G H");
@@ -333,9 +366,23 @@ bool ChessBoard::isSquareAttacked(int row, char col, PieceColor attackerColor)
             Piece *p = getPiece(r, c);
             if (p != nullptr && p->getColor() == attackerColor)
             {
-                if (p->canMove(r, c, row, col))
+                // SPECIAL HANDLING FOR PAWNS
+                if (p->getTypeName()[0] == 'P')
                 {
-                    // Check if path is clear (for pieces that need it)
+                    int dir = (p->getColor() == WHITE) ? 1 : -1;
+                    int rowDiff = row - r;
+                    int colDiff = abs(col - c);
+
+                    // Pawns only attack diagonally forward (row diff must match direction, col diff must be 1)
+                    if (rowDiff == dir && colDiff == 1)
+                    {
+                        return true;
+                    }
+                    // Ignore forward movement logic for attacks!
+                }
+                // LOGIC FOR ALL OTHER PIECES
+                else if (p->canMove(r, c, row, col))
+                {
                     if (isPathClear(r, c, row, col))
                     {
                         return true;
@@ -595,14 +642,14 @@ bool ChessBoard::isStalemate(PieceColor color)
 // Store current board state in history
 void ChessBoard::storeBoardState()
 {
-    // Shift history if full (remove oldest)
-    if (positionCount >= 50)
+    // Shift history if full (remove oldest) - keep only last 6 positions
+    if (positionCount >= 6)
     {
-        for (int i = 0; i < 49; i++)
+        for (int i = 0; i < 5; i++)
         {
             positionHistory[i] = positionHistory[i + 1];
         }
-        positionCount = 49;
+        positionCount = 5; // Will be incremented to 6 after adding new state
     }
 
     // Add the new state
@@ -623,14 +670,37 @@ void ChessBoard::storeBoardState()
             }
             else
             {
-                char pieceChar = p->getTypeName()[0]; // P, R, N, B, Q, K
+                char pieceChar;
+
+                switch (p->getType())
+                {
+                case PAWN:
+                    pieceChar = 'P';
+                    break;
+                case ROOK:
+                    pieceChar = 'R';
+                    break;
+                case KNIGHT:
+                    pieceChar = 'N';
+                    break; // Use 'N' for Knight
+                case BISHOP:
+                    pieceChar = 'B';
+                    break;
+                case QUEEN:
+                    pieceChar = 'Q';
+                    break;
+                case KING:
+                    pieceChar = 'K';
+                    break;
+                }
+
                 if (p->getColor() == BLACK)
                 {
-                    state.state[idx] = pieceChar + 32; // lowercase for black
+                    state.state[idx] = pieceChar + 32; // Lowercase
                 }
                 else
                 {
-                    state.state[idx] = pieceChar; // uppercase for white
+                    state.state[idx] = pieceChar; // Uppercase
                 }
             }
             idx++;
@@ -900,17 +970,26 @@ void ChessBoard::setCurrentTurn(PieceColor color)
     currentTurn = color;
 }
 
-// Add move to history
+// Add move to history (stores last 3 moves from each side = 6 total)
 void ChessBoard::addToHistory(int fromRow, char fromCol, int toRow, char toCol)
 {
-    if (moveCount < 100)
+    // If we have 6 moves, shift array left to make room for new move
+    if (moveCount >= 6)
     {
-        moveHistory[moveCount].fromRow = fromRow;
-        moveHistory[moveCount].fromCol = fromCol;
-        moveHistory[moveCount].toRow = toRow;
-        moveHistory[moveCount].toCol = toCol;
-        moveCount++;
+        // Shift all moves left by one position (remove oldest)
+        for (int i = 0; i < 5; i++)
+        {
+            moveHistory[i] = moveHistory[i + 1];
+        }
+        moveCount = 5; // Will be incremented to 6 after adding new move
     }
+
+    // Add new move at the end
+    moveHistory[moveCount].fromRow = fromRow;
+    moveHistory[moveCount].fromCol = fromCol;
+    moveHistory[moveCount].toRow = toRow;
+    moveHistory[moveCount].toCol = toCol;
+    moveCount++;
 }
 
 // Clear the board and reset game state
@@ -939,51 +1018,43 @@ void ChessBoard::clearBoard()
     lastMove.piece = nullptr;
 }
 
-// Initialize standard chess starting position
 void ChessBoard::initializeStandardGame()
 {
-    // Clear any existing pieces
     clearBoard();
 
-    // Place white pieces
+    // White Pieces
     placePiece(new Rook(WHITE), 1, 'A');
     placePiece(new Knight(WHITE), 1, 'B');
     placePiece(new Bishop(WHITE), 1, 'C');
     placePiece(new Queen(WHITE), 1, 'D');
     placePiece(new King(WHITE), 1, 'E');
-    Piece *newPiece = nullptr;
-    switch (promoteChoice)
+    placePiece(new Bishop(WHITE), 1, 'F');
+    placePiece(new Knight(WHITE), 1, 'G');
+    placePiece(new Rook(WHITE), 1, 'H');
+
+    // White Pawns
+    for (char c = 'A'; c <= 'H'; c++)
     {
-    case PROMOTE_QUEEN:
-        newPiece = new Queen(color);
-        break;
-    case PROMOTE_ROOK:
-        newPiece = new Rook(color);
-        break;
-    case PROMOTE_BISHOP:
-        newPiece = new Bishop(color);
-        break;
-    case PROMOTE_KNIGHT:
-        newPiece = new Knight(color);
-        break;
-    default:
-        Serial.println("Invalid promotion choice, defaulting to Queen");
-        newPiece = new Queen(color);
-        break;
+        placePiece(new Pawn(WHITE), 2, c);
     }
+
+    // Black Pieces
+    placePiece(new Rook(BLACK), 8, 'A');
+    placePiece(new Knight(BLACK), 8, 'B');
+    placePiece(new Bishop(BLACK), 8, 'C');
+    placePiece(new Queen(BLACK), 8, 'D');
+    placePiece(new King(BLACK), 8, 'E');
     placePiece(new Bishop(BLACK), 8, 'F');
     placePiece(new Knight(BLACK), 8, 'G');
     placePiece(new Rook(BLACK), 8, 'H');
 
-    // Place black pawns
+    // Black Pawns
     for (char c = 'A'; c <= 'H'; c++)
     {
         placePiece(new Pawn(BLACK), 7, c);
     }
 
-    // Store initial board state for repetition detection
     storeBoardState();
-
     Serial.println("Standard chess game initialized!");
 }
 

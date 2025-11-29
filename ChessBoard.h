@@ -86,9 +86,9 @@ private:
   Piece *board[8][8];
   PieceColor currentTurn;
   GameState gameState;
-  MoveHistory moveHistory[100]; // Store last 100 moves for repetition detection
-  int moveCount;
-  int halfMoveClock; // For 50-move rule
+  MoveHistory moveHistory[6]; // Store last 3 moves from each side (6 total)
+  int moveCount;              // Current number of moves stored (max 6)
+  int halfMoveClock;          // For 50-move rule
 
   // Board state storage for repetition detection
   // Store compact representation of board state (piece positions)
@@ -97,7 +97,7 @@ private:
     char state[64];  // 8x8 board, each char represents a piece: ' '=empty, 'P'=pawn, etc.
     PieceColor turn; // Whose turn it was
   };
-  BoardState positionHistory[50]; // Store last 50 positions
+  BoardState positionHistory[6]; // Store last 6 positions (for threefold repetition check)
   int positionCount;
 
   int rowToIndex(int row);
